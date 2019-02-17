@@ -1,0 +1,11 @@
+{
+	"host":"localhost",
+	"port":"27017",
+	"csvPath":"E:\\Bewerbung\\hiwi\\hiwi-erfurth\\Kameradaten\\SEQ13.csv",
+	
+	"db":"bigChart",
+	"collectionName":"SEQ13_750-1250_Frame",
+	"startFrame":750,
+	"endFrame":1250
+}
+	

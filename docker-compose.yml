@@ -1,0 +1,15 @@
+version: '3.1'
+services:
+  fill_db:
+    image: paua/sensorik-fill_db
+    environment:
+      fill_monogo_host: "192.168.178.58"
+      fill_monogo_port: 27017
+      fill_monogo_db: "bigChart"
+      fill_rest_port: 3000
+      fill_rest_user: "root12"
+      fill_rest_pw: "Daten2018"
+      env: "start"
+    ports:
+      - 3000:3000
+    
