@@ -1,5 +1,4 @@
 var MongoClient = require('mongodb').MongoClient;
-var Spinner = require('cli-spinner').Spinner;
 const express = require('express');
 const multer = require('multer');
 
@@ -15,11 +14,13 @@ config={
 if(process.env.fill_monogo_host!=undefined){config.host=process.env.fill_monogo_host}
 if(process.env.fill_monogo_port!=undefined){config.mongoPort=process.env.fill_monogo_port};
 if(process.env.fill_monogo_db!=undefined){config.db=process.env.fill_monogo_db};
-if(process.env.fill_rest_port!=undefined){config.restPort=process.env.fill_rest_port};
-if(process.env.fill_rest_user!=undefined){config.dbUser=process.env.fill_rest_user};
-if(process.env.fill_rest_pw!=undefined){config.dbPass=process.env.fill_rest_pw};
+if(process.env.fill_website_port!=undefined){config.restPort=process.env.fill_website_port};
+if(process.env.fill_mongo_user!=undefined){config.dbUser=process.env.fill_mongo_user};
+if(process.env.fill_mongo_pw!=undefined){config.dbPass=process.env.fill_mongo_pw};
 
-
+var collection="";
+var xCoordinate=0;
+var yCoordinate=0;
  
 const storage = multer.diskStorage({
 	destination: function (req, file, cb) {
@@ -32,51 +33,42 @@ const storage = multer.diskStorage({
 const upload = multer({storage: storage})
 const app = express();
   
-app.get('/upload', (req, res) => {
+app.get('/', (req, res) => {
 	res.sendFile(__dirname + '/upload.html');
 });
 
-app.post('/upload', upload.single('file-to-upload'), (req, res)=> {
-	console.log(req);
-	config.csvPath=req.file.path;
-	config.collectionName=req.file.filename+"_"+new Date().getDate()+"-"+new Date().getMonth()+"-"+new Date().getFullYear()+"-"+new Date().getHours()+":"+new Date().getMinutes();
-	console.log(config.collectionName);
-	insertIntoMongoDB(res);
+app.post('/', upload.single('file-to-upload'), (req, res)=> {
+	console.log(req.file.path);
+	let csvPath=req.file.path;
+	let collectionName=req.file.filename.replace('.','-')+"_"+new Date().getDate()+"-"+new Date().getMonth()+"-"+new Date().getFullYear()+"-"+new Date().getHours()+":"+new Date().getMinutes();
+	insertIntoMongoDB(res, collectionName, csvPath);
 	res.sendFile(__dirname + '/upload.html');
 });
 
 app.listen(config.restPort, function() {
 	console.log('REST-Service listening on port ' + config.restPort + '!');
 });
-
-
-
-var spinner = new Spinner('Insert Values in DB.. %s');
  
-var collection="";
-var xCoordinate=0;
-var yCoordinate=0;
-
-
-function insertIntoMongoDB(res)
+function insertIntoMongoDB(res, collectionName, csvPath)
 {    
-	MongoClient.connect("mongodb://"+config.dbUser+":"+config.dbPass+"@"+config.host+":"+config.mongoPort+"/?authMechanism=DEFAULT&authSource=db",  { useNewUrlParser: true }, function(err, db){  
+	mongoURL="mongodb://"+config.host+":"+config.mongoPort;
+	console.log(mongoURL);
+	MongoClient.connect(mongoURL,  { useNewUrlParser: true}, function(err, db){  
 		if(err){ console.log( err); }  
 		else{ 
-				readCSV(db, res);
+				readCSV(db, res, collectionName, csvPath);
 			}
 	}); 
 } 
     
-function readCSV(db,res)
+function readCSV(db,res, collectionName, csvPath)
 {	
 	var dbObject=db.db(config.db);
 	var frameNumber=0;
-		
-		
+	
 	var fs = require('fs');
 	var lineReader = require('readline').createInterface({
-		input: fs.createReadStream(config.csvPath)
+		input: fs.createReadStream(csvPath)
 	});
 
 
@@ -85,7 +77,7 @@ function readCSV(db,res)
 		let values=new Array;
 		
 		
-		for(i=0; i<array.length;i++)
+		for(i=0 ; i<array.length;i++)
 		{
 			if(array[i].indexOf("Frame")>-1)
 			{
@@ -99,27 +91,34 @@ function readCSV(db,res)
 			{
 				//if(frameNumber>=config.startFrame && frameNumber<=config.endFrame)
 				//{
-					values.push({temp:array[i].replace(',','.'), frame:frameNumber, x: xCoordinate , y: yCoordinate});
+					values.push({temp:Number(array[i].replace(',','.')), frame:frameNumber, x: xCoordinate , y: yCoordinate});
 					xCoordinate++;
 				//}
 			}
 			
 		}
-		yCoordinate++;
+		yCoordinate--;
 		xCoordinate=0;
 
 		
 		//if(frameNumber>=config.startFrame && frameNumber<=config.endFrame)
 		//{
-			fillServerWithThermaCamData(dbObject, config.collectionName,values);
+			fillServerWithThermaCamData(dbObject, collectionName,values);
 		//}
 	});
 
 	lineReader.on('close',()=> {
+		lineReader.close();
+		fs.unlink(csvPath, function (err) {
+			if (err) throw err;
+			console.log('File deleted!');
+		});  
+		createIndex(dbObject, collectionName,function()
+		{
 			db.close();
-			spinner.stop();
 			console.log("DONE");
-		});
+		});	
+	});
 }
 
 
@@ -128,4 +127,12 @@ function fillServerWithThermaCamData( dbObject,  collectionName,  value)
 	dbObject.collection(collectionName).insertMany(value, function(err, res) {
 		if (err) throw err;
 	});
+}
+
+function createIndex(dbObject,collectionName, callback)
+{
+	dbObject.collection(collectionName).createIndex("frame",function(err, res) {
+		if (err) throw err;
+		callback();
+	})
 }

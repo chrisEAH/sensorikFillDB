@@ -6,10 +6,10 @@ services:
       fill_monogo_host: "192.168.178.58"
       fill_monogo_port: 27017
       fill_monogo_db: "bigChart"
-      fill_rest_port: 3000
-      fill_rest_user: "root12"
-      fill_rest_pw: "Daten2018"
-      env: "start"
+      fill_monogo_pw: "Daten2018"
+      fill_mongo_user: "root12"
+      fill_website_port: 8080
+      env: "PROD"
     ports:
-      - 3000:3000
+      - 8080:8080
     

@@ -1,11 +1,11 @@
-#!/bin/sh
+#!/bin/bash
 
 set -e
 
-if [ "$ENV" = "build" ]
+if [ "$ENV" = "PROD" ]
     then
-    echo "running Test"
+    echo "running Production"
+    npm start
 else
-    echo "ruuning Production"
-    exec npm start
+    echo "finish BUILD"
 fi
