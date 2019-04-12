@@ -1,22 +1,27 @@
 var MongoClient = require('mongodb').MongoClient;
-const express = require('express');
+const app = require('express')();
 const multer = require('multer');
+var server = require('http').createServer(app);
 
 config={
 	"host":"localhost",
 	"mongoPort":"27017",
 	"db":"bigChart",
 	"restPort":3000,
-	"dbUser":"root12",
-	"dbPass":"Daten2018"
 }
 
 if(process.env.fill_monogo_host!=undefined){config.host=process.env.fill_monogo_host}
 if(process.env.fill_monogo_port!=undefined){config.mongoPort=process.env.fill_monogo_port};
 if(process.env.fill_monogo_db!=undefined){config.db=process.env.fill_monogo_db};
 if(process.env.fill_website_port!=undefined){config.restPort=process.env.fill_website_port};
-if(process.env.fill_mongo_user!=undefined){config.dbUser=process.env.fill_mongo_user};
-if(process.env.fill_mongo_pw!=undefined){config.dbPass=process.env.fill_mongo_pw};
+
+server.listen(config.restPort, function() {
+	console.log('Listening on port ' + config.restPort + '!');
+});
+
+var io = require('socket.io').listen(server);
+
+
 
 var collection="";
 var xCoordinate=0;
@@ -29,25 +34,35 @@ const storage = multer.diskStorage({
 	filename: function (req, file, cb) {
 	  cb(null, file.originalname)
 	}
-})
+});
+
 const upload = multer({storage: storage})
-const app = express();
+
+
   
 app.get('/', (req, res) => {
 	res.sendFile(__dirname + '/upload.html');
 });
 
-app.post('/', upload.single('file-to-upload'), (req, res)=> {
-	console.log(req.file.path);
-	let csvPath=req.file.path;
-	let collectionName=req.file.filename.replace('.','-')+"_"+new Date().getDate()+"-"+new Date().getMonth()+"-"+new Date().getFullYear()+"-"+new Date().getHours()+":"+new Date().getMinutes();
-	insertIntoMongoDB(res, collectionName, csvPath);
-	res.sendFile(__dirname + '/upload.html');
+io.on('connection', function (socket) {
+	console.log("sockt io connection");
+	io.emit('message', { text: 'uplaoding...' });
 });
 
-app.listen(config.restPort, function() {
-	console.log('REST-Service listening on port ' + config.restPort + '!');
+app.post('/', upload.single('file-to-upload'), (req, res)=> {
+	if(req.file==undefined)
+	{
+		res.sendFile(__dirname + '/upload.html');
+		return 0;
+	}
+	console.log(req.file.path);
+	res.sendFile(__dirname + '/loading.html');
+	let csvPath=req.file.path;
+	let collectionName=req.file.filename.replace('.','-')+"_"+(new Date().toLocaleDateString("de-DE")+ ":" + new Date().toLocaleTimeString("de-DE"));
+	insertIntoMongoDB(res, collectionName, csvPath);
 });
+
+
  
 function insertIntoMongoDB(res, collectionName, csvPath)
 {    
@@ -85,6 +100,7 @@ function readCSV(db,res, collectionName, csvPath)
 				frameNumber++;
 				yCoordinate=0;
 				console.log("frame: "+frameNumber);
+				io.emit('message', { text: "Fügt Frame: "+frameNumber+" ein." });
 			}
 			
 			if(typeof collection !== 'undefined' && array[i].indexOf("Frame")==-1)
@@ -112,11 +128,19 @@ function readCSV(db,res, collectionName, csvPath)
 		fs.unlink(csvPath, function (err) {
 			if (err) throw err;
 			console.log('File deleted!');
-		});  
-		createIndex(dbObject, collectionName,function()
+		});
+		
+		insertMaxFrameNumber(dbObject, collectionName, frameNumber);
+		
+		io.emit('message', { text: "Erstellt den Index..." });
+		createIndexFrame(dbObject, collectionName,function()
 		{
-			db.close();
-			console.log("DONE");
+			createIndexMaxFrame(dbObject, collectionName,function()
+			{
+				io.emit('message', { text: "Fertig" });
+				db.close();
+				console.log("DONE");
+			});
 		});	
 	});
 }
@@ -129,10 +153,25 @@ function fillServerWithThermaCamData( dbObject,  collectionName,  value)
 	});
 }
 
-function createIndex(dbObject,collectionName, callback)
+function createIndexFrame(dbObject,collectionName, callback)
 {
-	dbObject.collection(collectionName).createIndex("frame",function(err, res) {
+	dbObject.collection(collectionName).createIndex({frame:1, temp:-1},function(err, res) {
 		if (err) throw err;
 		callback();
-	})
+	});
+}
+
+function createIndexMaxFrame(dbObject,collectionName, callback)
+{
+	dbObject.collection(collectionName).createIndex({maxFrame:-1},function(err, res) {
+		if (err) throw err;
+		callback();
+	});
+}
+
+function insertMaxFrameNumber(dbObject, collectionName, frameNumber)
+{
+	dbObject.collection(collectionName).insertOne({maxFrame:frameNumber}, function(err, res) {
+		if (err) throw err;
+	});
 }

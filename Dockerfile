@@ -1,4 +1,4 @@
-FROM node:latest
+FROM node:11.8-slim
 WORKDIR /app
 COPY app /app
 
