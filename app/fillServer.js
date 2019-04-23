@@ -130,18 +130,20 @@ function readCSV(db,res, collectionName, csvPath)
 			console.log('File deleted!');
 		});
 		
-		insertMaxFrameNumber(dbObject, collectionName, frameNumber);
-		
 		io.emit('message', { text: "Erstellt den Index..." });
-		createIndexFrame(dbObject, collectionName,function()
+
+		insertMaxFrameNumber(dbObject, collectionName, frameNumber, function()
 		{
-			createIndexMaxFrame(dbObject, collectionName,function()
+			createIndexFrame(dbObject, collectionName,function()
 			{
-				io.emit('message', { text: "Fertig" });
-				db.close();
-				console.log("DONE");
-			});
-		});	
+				createIndexMaxFrame(dbObject, collectionName,function()
+				{
+					io.emit('message', { text: "Fertig" });
+					db.close();
+					console.log("DONE");
+				});
+			});	
+		});
 	});
 }
 
@@ -169,9 +171,10 @@ function createIndexMaxFrame(dbObject,collectionName, callback)
 	});
 }
 
-function insertMaxFrameNumber(dbObject, collectionName, frameNumber)
+function insertMaxFrameNumber(dbObject, collectionName, frameNumber, callback)
 {
 	dbObject.collection(collectionName).insertOne({maxFrame:frameNumber}, function(err, res) {
 		if (err) throw err;
+		callback();
 	});
 }
